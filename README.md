@@ -3,6 +3,8 @@ Multi-layer Recurrent Neural Networks (LSTM, RNN) for RNN joke generation in Pyt
 
 Mostly reused code from [word-rnn-tensorflow](https://github.com/hunkim/word-rnn-tensorflow), which is based on https://github.com/sherjilozair/char-rnn-tensorflow inspired by Andrej Karpathy's [char-rnn](https://github.com/karpathy/char-rnn).
 
+Stanford CS224N Winter 2016-2017 Project
+
 # Data
 Some of the data are reused from https://github.com/brendansudol/rnn-joke-generate.
 
