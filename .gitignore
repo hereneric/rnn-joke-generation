@@ -1,5 +1,6 @@
 *.pyc
 *~
 *.png
+*.DS_Store
 
 assignment3/results/*
