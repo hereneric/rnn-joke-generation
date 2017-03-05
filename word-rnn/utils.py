@@ -96,15 +96,16 @@ class TextLoader():
         if self.num_batches==0:
             assert False, "Not enough data. Make seq_length and batch_size small."
 
+        # round to the multiple of self.batch_size * self.seq_length
         self.tensor = self.tensor[:self.num_batches * self.batch_size * self.seq_length]
         xdata = self.tensor
         ydata = np.copy(self.tensor)
 
         ydata[:-1] = xdata[1:]
         ydata[-1] = xdata[0]
+        # list of arrays
         self.x_batches = np.split(xdata.reshape(self.batch_size, -1), self.num_batches, 1)
         self.y_batches = np.split(ydata.reshape(self.batch_size, -1), self.num_batches, 1)
-
 
     def next_batch(self):
         x, y = self.x_batches[self.pointer], self.y_batches[self.pointer]

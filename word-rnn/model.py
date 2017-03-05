@@ -14,6 +14,7 @@ class Model():
             args.seq_length = 1
 
         if args.model == 'rnn':
+            """Most basic RNN: output = new_state = act(W * input + U * state + B)."""
             cell_fn = rnn_cell.BasicRNNCell
         elif args.model == 'gru':
             cell_fn = rnn_cell.GRUCell
@@ -28,6 +29,7 @@ class Model():
 
         self.input_data = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
         self.targets = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
+        # Zero-filled state tensor(s).
         self.initial_state = cell.zero_state(args.batch_size, tf.float32)
         self.batch_pointer = tf.Variable(0, name="batch_pointer", trainable=False, dtype=tf.int32)
         self.inc_batch_pointer_op = tf.assign(self.batch_pointer, self.batch_pointer + 1)
@@ -58,12 +60,21 @@ class Model():
                 inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
 
         def loop(prev, _):
+            """
+            if infer is true, this function will be applied to the i-th output
+            in order to generate the i+1-st input, and decoder_inputs will be ignored,
+            except for the first element ("GO" symbol)
+            """
             prev = tf.matmul(prev, softmax_w) + softmax_b
             prev_symbol = tf.stop_gradient(tf.argmax(prev, 1))
             return tf.nn.embedding_lookup(embedding, prev_symbol)
 
+        # Get RNN outputs in one line
+        # https://github.com/petewarden/tensorflow_ios/blob/master/tensorflow/python/ops/seq2seq.py
         outputs, last_state = seq2seq.rnn_decoder(inputs, self.initial_state, cell, loop_function=loop if infer else None, scope='rnnlm')
+        # output is the new state
         output = tf.reshape(tf.concat(1, outputs), [-1, args.rnn_size])
+        # add a softmax layer
         self.logits = tf.matmul(output, softmax_w) + softmax_b
         self.probs = tf.nn.softmax(self.logits)
         loss = seq2seq.sequence_loss_by_example([self.logits],
@@ -83,10 +94,10 @@ class Model():
     def sample(self, sess, words, vocab, num=200, prime='first all', sampling_type=1, pick=0):
         state = sess.run(self.cell.zero_state(1, tf.float32))
         if not len(prime) or prime == " ":
-            prime  = random.choice(list(vocab.keys()))    
+            prime  = random.choice(list(vocab.keys()))
         print (prime)
         for word in prime.split()[:-1]:
-            print (word)
+            # print (word)
             x = np.zeros((1, 1))
             x[0, 0] = vocab.get(word,0)
             feed = {self.input_data: x, self.initial_state:state}

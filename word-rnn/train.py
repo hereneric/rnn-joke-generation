@@ -49,9 +49,11 @@ def main():
                             'model.ckpt-*'      : file(s) with model definition (created by tf)
                         """)
     args = parser.parse_args()
+    # execution starts from here
     train(args)
 
 def train(args):
+    # parse text data and record statistics
     data_loader = TextLoader(args.data_dir, args.batch_size, args.seq_length)
     args.vocab_size = data_loader.vocab_size
 
@@ -61,6 +63,7 @@ def train(args):
         assert os.path.isdir(args.init_from)," %s must be a path" % args.init_from
         assert os.path.isfile(os.path.join(args.init_from,"config.pkl")),"config.pkl file does not exist in path %s"%args.init_from
         assert os.path.isfile(os.path.join(args.init_from,"words_vocab.pkl")),"words_vocab.pkl.pkl file does not exist in path %s" % args.init_from
+        # load checkpoint
         ckpt = tf.train.get_checkpoint_state(args.init_from)
         assert ckpt,"No checkpoint found"
         assert ckpt.model_checkpoint_path,"No model path found in checkpoint"
@@ -78,32 +81,56 @@ def train(args):
         assert saved_words==data_loader.words, "Data and loaded model disagree on word set!"
         assert saved_vocab==data_loader.vocab, "Data and loaded model disagree on dictionary mappings!"
 
+    # save arguments to config.pkl
     with open(os.path.join(args.save_dir, 'config.pkl'), 'wb') as f:
         cPickle.dump(args, f)
+    # save words parsed by data_loader to words_vocab.pkl
     with open(os.path.join(args.save_dir, 'words_vocab.pkl'), 'wb') as f:
         cPickle.dump((data_loader.words, data_loader.vocab), f)
 
+    # input output placeholders, loss_op, optimizer, train_op etc. are defined in model.py
     model = Model(args)
 
+    """
+    tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES)
+    Merges all summaries collected in the default graph.
+    key: GraphKey used to collect the summaries. Defaults to GraphKeys.SUMMARIES.
+    Returns:
+    If no summaries were collected, returns None. Otherwise returns a scalar Tensor
+    of type string containing the serialized Summary protocol buffer resulting from
+    the merging.
+    """
     merged = tf.summary.merge_all()
+    # the FileWriter class provides a mechanism to create an event file in a given
+    # directory and add summaries and events to it.
     train_writer = tf.summary.FileWriter(args.log_dir)
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_mem)
 
+    # Launch the graph in a session.
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+        # Adds a Graph to the event file.
         train_writer.add_graph(sess.graph)
+        # Run the Op that initializes global variables.
         tf.global_variables_initializer().run()
+        # tf.global_variables() returns global variables.(A list of Variable objects)
+        # The Saver class adds ops to save and restore variables to and from checkpoints.
         saver = tf.train.Saver(tf.global_variables())
-        # restore model
+        # Restore model
         if args.init_from is not None:
             saver.restore(sess, ckpt.model_checkpoint_path)
+        # e: epoch number
         for e in range(model.epoch_pointer.eval(), args.num_epochs):
+            # model.lr <- args.learning_rate * (args.decay_rate ** e)
             sess.run(tf.assign(model.lr, args.learning_rate * (args.decay_rate ** e)))
+            # pointer <- 0
             data_loader.reset_batch_pointer()
             state = sess.run(model.initial_state)
             speed = 0
             if args.init_from is None:
+                # Assign 0 to batch_pointer
                 assign_op = model.batch_pointer.assign(0)
                 sess.run(assign_op)
+                # Assign e to the epoch_pointer
                 assign_op = model.epoch_pointer.assign(e)
                 sess.run(assign_op)
             if args.init_from is not None:
@@ -116,6 +143,7 @@ def train(args):
                         model.batch_time: speed}
                 summary, train_loss, state, _, _ = sess.run([merged, model.cost, model.final_state,
                                                              model.train_op, model.inc_batch_pointer_op], feed)
+                # This method wraps the provided summary in an Event protocol buffer and adds it to the event file.
                 train_writer.add_summary(summary, e * data_loader.num_batches + b)
                 speed = time.time() - start
                 if (e * data_loader.num_batches + b) % args.batch_size == 0:
